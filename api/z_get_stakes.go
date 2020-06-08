@@ -7,64 +7,48 @@ import (
 )
 
 type CStake struct {
-	Address  string  `json:"address"`
-	PubKey   string  `json:"pub_key"`
-	Coin     string  `json:"coin"`
-	Value    string  `json:"value"`
-	BipValue string  `json:"bip_value"`
+	Address  string `json:"address"`
+	PubKey   string `json:"pub_key"`
+	Coin     string `json:"coin"`
+	Value    string `json:"value"`
+	BipValue string `json:"bip_value"`
 }
 
-func ResponseStakes(state *state.State, c candidates.Candidate, coin string, address types.Address) []CStake{
-	var coinstake CStake
-	var coinstakes []CStake
-	var tmsymbol string
-	var tmaddress types.Address
+func ResponseStakes(state *state.State, c *candidates.Candidate, coin string, address types.Address) []*CStake {
+	var coinStakes []*CStake
 
-	multiresponse := false
-	allpubkeystakes := false
+	var multiresponse bool
+	var allPubkeyStakes bool
 
-	if  coin != tmsymbol{
-		if address != tmaddress{
-			multiresponse=true
-		}
-	}else if address == tmaddress{
-			allpubkeystakes = true
+	var emptyAddress types.Address
+
+	if coin != "" && address != emptyAddress {
+		multiresponse = true
 	}
+	if coin == "" && address == emptyAddress {
+		allPubkeyStakes = true
+	}
+
 	stakes := state.Candidates.GetStakes(c.PubKey)
 	for _, stake := range stakes {
-		loadstake := false 
-		if multiresponse == true {
-			if stake.Coin.String() == coin && stake.Owner == address{
-				loadstake = true				
-			}
-		}else{
-			if stake.Coin.String() == coin{
-				loadstake = true			
-			}
-			if stake.Owner == address{
-				loadstake = true	
-			}
-			if allpubkeystakes{
-				loadstake = true			
-			}
-		}  
-		if loadstake == true {
-			coinstake.Address = stake.Owner.String()
-			coinstake.PubKey = c.PubKey.String()
-			coinstake.Coin = stake.Coin.String()
-			coinstake.Value = stake.Value.String()
-			coinstake.BipValue = stake.BipValue.String()
-			coinstakes = append(coinstakes,coinstake)
+		if !(multiresponse && stake.Coin.String() == coin && stake.Owner == address) &&
+			!(!multiresponse && stake.Coin.String() == coin || stake.Owner == address || allPubkeyStakes) {
+			continue
 		}
+		coinStakes = append(coinStakes, &CStake{
+			Address:  stake.Owner.String(),
+			PubKey:   c.PubKey.String(),
+			Coin:     stake.Coin.String(),
+			Value:    stake.Value.String(),
+			BipValue: stake.BipValue.String(),
+		})
+
 	}
-	return coinstakes 
+	return coinStakes
 }
 
-
-func GetStakes(pubkey types.Pubkey, height int, coin string, address types.Address) ([]CStake, error) {
-	var coinstakes []CStake
-	var tmpubkey types.Pubkey
-	var candidates []*candidates.Candidate
+func GetStakes(pubkey types.Pubkey, height int, coin string, address types.Address) ([]*CStake, error) {
+	var coinStakes []*CStake
 
 	cState, err := GetStateForHeight(height)
 	if err != nil {
@@ -78,21 +62,24 @@ func GetStakes(pubkey types.Pubkey, height int, coin string, address types.Addre
 		cState.Unlock()
 	}
 
-	cState.RLock() 
+	cState.RLock()
 	defer cState.RUnlock()
-	
-	if pubkey == tmpubkey {
-		candidates = cState.Candidates.GetCandidates()
-	}else{
-		candidates =append(candidates,cState.Candidates.GetCandidate(pubkey))
+
+	var emptyPyb types.Pubkey
+
+	var allCandidates []*candidates.Candidate
+	if pubkey == emptyPyb {
+		allCandidates = cState.Candidates.GetCandidates()
+	} else {
+		allCandidates = append(allCandidates, cState.Candidates.GetCandidate(pubkey))
 	}
 
-	for _, candidate := range candidates {
-		tmresponse:=ResponseStakes(cState, *candidate, coin ,address) 
-		for _,coinstake:= range tmresponse {
-			coinstakes = append(coinstakes,coinstake)
+	for _, candidate := range allCandidates {
+		tmresponse := ResponseStakes(cState, candidate, coin, address)
+		for _, coinStake := range tmresponse {
+			coinStakes = append(coinStakes, coinStake)
 		}
 	}
 
-	return coinstakes, nil
+	return coinStakes, nil
 }

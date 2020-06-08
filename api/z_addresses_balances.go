@@ -1,12 +1,10 @@
 package api
 
 import (
- 	"github.com/MinterTeam/minter-go-node/core/types"
-	"github.com/MinterTeam/minter-go-node/formula"
 	"github.com/MinterTeam/minter-go-node/core/state"
-	"github.com/MinterTeam/minter-go-node/core/state/candidates"
+	"github.com/MinterTeam/minter-go-node/core/types"
+	"github.com/MinterTeam/minter-go-node/formula"
 	"math/big"
-	"fmt"
 )
 
 type CoinBalance struct {
@@ -16,159 +14,140 @@ type CoinBalance struct {
 }
 
 type AddressBalanceResponse struct {
-	Freecoins         	[]CoinBalance 	`json:"freecoins"`
-	Delegated         	[]CoinBalance 	`json:"delegated"`
-	Total         		[]CoinBalance 	`json:"total"`
-	TransactionCount 	uint64         	`json:"transaction_count"`
-	Bipvalue     		string       	`json:"bipvalue"`
-} 
+	Freecoins []*CoinBalance `json:"freecoins"`
+	Delegated []*CoinBalance `json:"delegated"`
+
+	//todo: unbound (замороженные)
+
+	Total            []*CoinBalance `json:"total"`
+	TransactionCount uint64         `json:"transaction_count"`
+	Bipvalue         string         `json:"bipvalue"`
+}
 
 type AddressesBalancesResponse struct {
-	Address 	types.Address 		`json:"address"`
-	Balance		AddressBalanceResponse	`json:"balance"`
+	Address types.Address           `json:"address"`
+	Balance *AddressBalanceResponse `json:"balance"`
+}
 
-} 
+type UserStake struct {
+	Value    *big.Int
+	BipValue *big.Int
+}
 
-
-
-func CustomCoinBipBalance(coinToSellString string, valueToSell *big.Int, cState *state.State)(*big.Int) {
-
-	var result *big.Int
-
+func CustomCoinBipBalance(coinToSellString string, valueToSell *big.Int, cState *state.State) *big.Int {
 	coinToSell := types.StrToCoinSymbol(coinToSellString)
 	coinToBuy := types.StrToCoinSymbol("BIP")
 
 	if coinToSell == coinToBuy {
-		result = valueToSell
-	}else{
-		switch {
-		case coinToSell == types.GetBaseCoin():
-			coin := cState.Coins.GetCoin(coinToBuy)
-			result = formula.CalculatePurchaseReturn(coin.Volume(), coin.Reserve(), coin.Crr(), valueToSell)
-		case coinToBuy == types.GetBaseCoin():
-			coin := cState.Coins.GetCoin(coinToSell)
-			result = formula.CalculateSaleReturn(coin.Volume(), coin.Reserve(), coin.Crr(), valueToSell)
-		default:
-			coinFrom := cState.Coins.GetCoin(coinToSell)
-			coinTo := cState.Coins.GetCoin(coinToBuy)
-			basecoinValue := formula.CalculateSaleReturn(coinFrom.Volume(), coinFrom.Reserve(), coinFrom.Crr(), valueToSell)
-			result = formula.CalculatePurchaseReturn(coinTo.Volume(), coinTo.Reserve(), coinTo.Crr(), basecoinValue)
-		}
-
+		return valueToSell
 	}
 
-return result 
+	if coinToSell == types.GetBaseCoin() {
+		coin := cState.Coins.GetCoin(coinToBuy)
+		return formula.CalculatePurchaseReturn(coin.Volume(), coin.Reserve(), coin.Crr(), valueToSell)
+	}
+
+	if coinToBuy == types.GetBaseCoin() {
+		coin := cState.Coins.GetCoin(coinToSell)
+		return formula.CalculateSaleReturn(coin.Volume(), coin.Reserve(), coin.Crr(), valueToSell)
+	}
+
+	coinFrom := cState.Coins.GetCoin(coinToSell)
+	coinTo := cState.Coins.GetCoin(coinToBuy)
+	basecoinValue := formula.CalculateSaleReturn(coinFrom.Volume(), coinFrom.Reserve(), coinFrom.Crr(), valueToSell)
+	return formula.CalculatePurchaseReturn(coinTo.Volume(), coinTo.Reserve(), coinTo.Crr(), basecoinValue)
+
 }
 
-
-func MakeAddressBalance(height int, address types.Address) (*AddressBalanceResponse,
-	error) {
+func MakeAddressBalance(address types.Address, height int) (*AddressBalanceResponse, error) {
 	cState, err := GetStateForHeight(height)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if height != 0 {
 		cState.Lock()
 		cState.Candidates.LoadCandidates()
 		cState.Candidates.LoadStakes()
 		cState.Unlock()
-	} 
+	}
 
-		cState.RLock()
-		defer cState.RUnlock()
+	cState.RLock()
+	defer cState.RUnlock()
 
 	balances := cState.Accounts.GetBalances(address)
 	var response AddressBalanceResponse
-	coinsbipvalue := big.NewInt(0)
 
+	response.Freecoins = make([]*CoinBalance, 0, len(balances))
+
+	totalStakesGroupByCoin := map[string]*UserStake{}
+
+	freecoinStakesGroupByCoin := map[string]*UserStake{}
 	for coin, value := range balances {
 		result := CustomCoinBipBalance(coin.String(), value, cState)
-		freecoin:=CoinBalance{
-			Coin: 		coin.String(),
-			Value: 		value.String(),
-			BipValue: 	result.String(),
-			}
-		response.Freecoins = append(response.Freecoins,freecoin) 
-	} 
- 	
-	
-	candidates := cState.Candidates.GetCandidates()
-	t1:=big.NewInt(0)
-	t2:=big.NewInt(0)
-	t3:=big.NewInt(0)
-	t4:=big.NewInt(0)  
-	for _, candidate := range candidates {
-		tmstakes :=ResponseUserstake(cState, *candidate, address.String())
-		if len(tmstakes) > 0 {
-			for _,tmstake:= range tmstakes{
-				fmt.Sscan(tmstake.Value, t1) 
-				fmt.Sscan(tmstake.BipValue, t2)
-				coinfound:=false
-				for i,res:= range response.Delegated{
-					if res.Coin == tmstake.Coin {
-						fmt.Sscan(res.Value, t3)
-						fmt.Sscan(res.BipValue, t4)
-						t1.Add(t1,t3)
-						t2.Add(t2,t4)
-						response.Delegated[i].Value = t1.String()
-						response.Delegated[i].BipValue = t2.String()						
-						coinfound = true	
-						break
-					}
+		freecoinStakesGroupByCoin[coin.String()] = &UserStake{
+			Value:    value,
+			BipValue: result,
+		}
+		totalStakesGroupByCoin[coin.String()] = &UserStake{
+			Value:    value,
+			BipValue: result,
+		}
+		response.Freecoins = append(response.Freecoins, &CoinBalance{
+			Coin:     coin.String(),
+			Value:    value.String(),
+			BipValue: result.String(),
+		})
+	}
+
+	var userDelegatedStakesGroupByCoin = map[string]*UserStake{}
+	allCandidates := cState.Candidates.GetCandidates()
+	for _, candidate := range allCandidates {
+		userStakes := UserStakes(cState, candidate.PubKey, address.String())
+		for coin, userStake := range userStakes {
+			stake, ok := userDelegatedStakesGroupByCoin[coin]
+			if !ok {
+				stake = &UserStake{
+					Value:    big.NewInt(0),
+					BipValue: big.NewInt(0),
 				}
-				if !coinfound {
-					response.Delegated = append(response.Delegated, tmstake)
-				}
-
+			}
+			userDelegatedStakesGroupByCoin[coin] = &UserStake{
+				Value:    big.NewInt(0).Add(stake.Value, userStake.Value),
+				BipValue: big.NewInt(0).Add(stake.BipValue, userStake.BipValue),
 			}
 		}
 	}
+	for coin, delegatedStake := range userDelegatedStakesGroupByCoin {
+		response.Delegated = append(response.Delegated, &CoinBalance{
+			Coin:     coin,
+			Value:    delegatedStake.Value.String(),
+			BipValue: delegatedStake.BipValue.String(),
+		})
 
-	for _, coin := range response.Freecoins{
-		response.Total = append(response.Total,coin)
-	}
-
-
-	t1=big.NewInt(0)
-	t2=big.NewInt(0)
-
-	for _,coin:= range response.Delegated {
-		coinfound:=false 
-		for i,_:= range response.Total{
-			if response.Total[i].Coin == coin.Coin {
-				fmt.Sscan(response.Total[i].Value, t1)
-				fmt.Sscan(coin.Value, t2)
-				t1.Add(t1,t2)
-				response.Total[i].Value = t1.String()
-				coinfound = true
-				break
+		totalStake, ok := totalStakesGroupByCoin[coin]
+		if !ok {
+			totalStake = &UserStake{
+				Value:    big.NewInt(0),
+				BipValue: big.NewInt(0),
 			}
 		}
-		if !coinfound {
-			response.Total= append(response.Total,coin)
+		totalStakesGroupByCoin[coin] = &UserStake{
+			Value:    big.NewInt(0).Add(totalStake.Value, delegatedStake.Value),
+			BipValue: big.NewInt(0).Add(totalStake.BipValue, delegatedStake.BipValue),
 		}
 	}
 
+	coinsbipvalue := big.NewInt(0)
 
-	coinsbipvalue = big.NewInt(0)
-
-	for i, coin := range response.Total {
-		value:=big.NewInt(0)
-		fmt.Sscan(coin.Value, value)
-		result := CustomCoinBipBalance(coin.Coin, value, cState)
-
-		if coinsbipvalue == nil {
-			coinsbipvalue = result 
-		} else {
-			coinsbipvalue.Add(coinsbipvalue , result)
-		}
-		response.Total[i] = CoinBalance{
-				Coin: coin.Coin,
-				Value: value.String(),
-				BipValue: result.String(),
-			}
-	} 
+	for coin, stake := range totalStakesGroupByCoin {
+		response.Total = append(response.Total, &CoinBalance{
+			Coin:     coin,
+			Value:    stake.Value.String(),
+			BipValue: stake.BipValue.String(),
+		})
+		coinsbipvalue = big.NewInt(0).Add(coinsbipvalue, stake.BipValue)
+	}
 
 	response.TransactionCount = cState.Accounts.GetNonce(address)
 	response.Bipvalue = coinsbipvalue.String()
@@ -176,21 +155,20 @@ func MakeAddressBalance(height int, address types.Address) (*AddressBalanceRespo
 	return &response, nil
 }
 
+func UserStakes(state *state.State, c types.Pubkey, address string) map[string]*UserStake {
+	var userStakes = map[string]*UserStake{}
 
-func ResponseUserstake(state *state.State, c candidates.Candidate, address string) []CoinBalance {
-	var tmstakes CoinBalance 
-	var userstake []CoinBalance 
+	stakes := state.Candidates.GetStakes(c)
 
-	stakes := state.Candidates.GetStakes(c.PubKey)
-
-	for _,stake := range stakes {
-		if stake.Owner.String()==address{
-			tmstakes.Coin    = stake.Coin.String()
-			tmstakes.Value   = stake.Value.String() 
-			tmstakes.BipValue= stake.BipValue.String()
-			userstake=append(userstake,tmstakes)
+	for _, stake := range stakes {
+		if stake.Owner.String() != address {
+			continue
+		}
+		userStakes[stake.Coin.String()] = &UserStake{
+			Value:    stake.Value,
+			BipValue: stake.BipValue,
 		}
 	}
-	
-	return userstake
+
+	return userStakes
 }

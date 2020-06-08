@@ -24,6 +24,7 @@ require (
 	github.com/tendermint/iavl v0.13.0
 	github.com/tendermint/tendermint v0.33.2
 	github.com/tendermint/tm-db v0.4.1
+	github.com/tidwall/gjson v1.6.0
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5
 	github.com/urfave/cli/v2 v2.0.0
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413

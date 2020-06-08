@@ -56,7 +56,7 @@ func runNode(cmd *cobra.Command) error {
 		}
 
 		required := RequiredOpenFilesLimit + uint64(cfg.StateMemAvailable)
-		if rLimit.Cur < required {
+		if false && rLimit.Cur < required {
 			return fmt.Errorf("open files limit is too low: required %d, got %d", required, rLimit.Cur)
 		}
 	}

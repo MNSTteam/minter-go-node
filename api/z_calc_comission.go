@@ -1,104 +1,103 @@
 package api
 
 import (
+	"fmt"
+	"github.com/MinterTeam/minter-go-node/core/commissions"
+	"github.com/MinterTeam/minter-go-node/core/transaction"
+	"github.com/MinterTeam/minter-go-node/core/types"
 	"github.com/MinterTeam/minter-go-node/formula"
 	"github.com/MinterTeam/minter-go-node/rpc/lib/types"
-	"github.com/MinterTeam/minter-go-node/core/types"
-	"github.com/MinterTeam/minter-go-node/core/transaction"
-	"github.com/MinterTeam/minter-go-node/core/commissions"
 	"math/big"
 )
 
 type UseMaxResponse struct {
-	GasCoin 		string `json:"gascoin"`
-	StartValue 		string `json:"startvalue"`
-	TXComissionValue 	string `json:"txvalue"`
-	EndValue 		string `json:"endvalue"`
+	GasCoin          string `json:"gascoin"`
+	StartValue       string `json:"startvalue"`
+	TXComissionValue string `json:"txvalue"`
+	EndValue         string `json:"endvalue"`
 }
 
-
-func CalcTxCommission(gascoin string, height int, txtype string, payload string, mtxs int) (string, error) {
-	commissionInBaseCoin:=big.NewInt(0)
-	if txtype == "SendTx" {commissionInBaseCoin = big.NewInt(commissions.SendTx)}
-	if txtype == "ConvertTx" {commissionInBaseCoin = big.NewInt(commissions.ConvertTx)}
-	if txtype == "DeclareCandidacyTx" {commissionInBaseCoin = big.NewInt(commissions.DeclareCandidacyTx)}
-	if txtype == "DelegateTx" {commissionInBaseCoin = big.NewInt(commissions.DelegateTx)}
-	if txtype == "UnbondTx" {commissionInBaseCoin = big.NewInt(commissions.UnbondTx)}
-	if txtype == "ToggleCandidateStatus" {commissionInBaseCoin = big.NewInt(commissions.ToggleCandidateStatus)}
-	if txtype == "EditCandidate" {commissionInBaseCoin = big.NewInt(commissions.EditCandidate)}
-	if txtype == "RedeemCheckTx" {commissionInBaseCoin = big.NewInt(commissions.RedeemCheckTx)}
-	if txtype == "CreateMultisig" {commissionInBaseCoin = big.NewInt(commissions.CreateMultisig)}
-	if txtype == "MultiSend" {
-	if mtxs == 0 {
-		return "", rpctypes.RPCError{Code: 400, Message: "Set number of txs for multisend (mtxs)"}
-	}
-	commissionInBaseCoin = big.NewInt(commissions.MultisendDelta*(int64(mtxs)+1))
-	}
-	
-	if commissionInBaseCoin.Cmp(big.NewInt(0))== 0{
+func CalcTxCommission(gascoin string, height int, txtype string, payload []byte, mtxs int64) (string, error) {
+	var commissionInBaseCoin *big.Int
+	switch txtype {
+	case "SendTx":
+		commissionInBaseCoin = big.NewInt(commissions.SendTx)
+	case "ConvertTx":
+		commissionInBaseCoin = big.NewInt(commissions.ConvertTx)
+	case "DeclareCandidacyTx":
+		commissionInBaseCoin = big.NewInt(commissions.DeclareCandidacyTx)
+	case "DelegateTx":
+		commissionInBaseCoin = big.NewInt(commissions.DelegateTx)
+	case "UnbondTx":
+		commissionInBaseCoin = big.NewInt(commissions.UnbondTx)
+	case "ToggleCandidateStatus":
+		commissionInBaseCoin = big.NewInt(commissions.ToggleCandidateStatus)
+	case "EditCandidate":
+		commissionInBaseCoin = big.NewInt(commissions.EditCandidate)
+	case "RedeemCheckTx":
+		commissionInBaseCoin = big.NewInt(commissions.RedeemCheckTx)
+	case "CreateMultisig":
+		commissionInBaseCoin = big.NewInt(commissions.CreateMultisig)
+	case "MultiSend":
+		if mtxs <= 0 {
+			return "", rpctypes.RPCError{Code: 400, Message: "Set number of txs for multisend (mtxs)"}
+		}
+		commissionInBaseCoin = big.NewInt(commissions.MultisendDelta*(mtxs-1) + 10)
+	default:
 		return "", rpctypes.RPCError{Code: 401, Message: "Set correct txtype for tx"}
 	}
 
-	commissionInBaseCoin.Mul(commissionInBaseCoin, transaction.CommissionMultiplier)
-	commissionfreepayload := big.NewInt(0).Set(commissionInBaseCoin)
-	
-	payloadbyte := 1000
-	if len([]byte(payload)) < 1000 {
-		payloadbyte = len([]byte(payload))
+	if len(payload) > 1024 {
+		return "", rpctypes.RPCError{Code: 401, Message: fmt.Sprintf("TX payload length is over %d bytes", 1024)}
 	}
 
-	payloadcomission:= big.NewInt(commissions.PayloadByte * int64(payloadbyte))
-	payloadcomission.Mul(payloadcomission, transaction.CommissionMultiplier)
-	comissionpayload := big.NewInt(0).Set(payloadcomission)
-
-	totalCommissionInBaseCoin := new(big.Int).Add(commissionfreepayload,comissionpayload)
+	totalCommissionInBaseCoin := new(big.Int).Mul(big.NewInt(0).Add(commissionInBaseCoin, big.NewInt(int64(len(payload)))), transaction.CommissionMultiplier)
 
 	cState, err := GetStateForHeight(height)
 	if err != nil {
 		return "", err
 	}
 
-	cState.RLock() 
+	cState.RLock()
 	defer cState.RUnlock()
-	var commission *big.Int
-	
-	if gascoin != "BIP" {
 
-		coin := cState.Coins.GetCoin(types.StrToCoinSymbol(gascoin))
-
-		if coin == nil {
-			return "", rpctypes.RPCError{Code: 404, Message: "Coin not found"}
-		}
-
-		if totalCommissionInBaseCoin.Cmp(coin.Reserve()) == 1{
-			return "", rpctypes.RPCError{Code: 400, Message: "Not enough coin reserve for pay comission"}
-		}
-
-		commission= formula.CalculateSaleAmount(coin.Volume(), coin.Reserve(), coin.Crr(), totalCommissionInBaseCoin )
-	}else{
-		commission= totalCommissionInBaseCoin 
+	if gascoin == "BIP" {
+		return totalCommissionInBaseCoin.String(), nil
 	}
-	return commission.String(), nil
+
+	coin := cState.Coins.GetCoin(types.StrToCoinSymbol(gascoin))
+
+	if coin == nil {
+		return "", rpctypes.RPCError{Code: 404, Message: "Gas Coin not found"}
+	}
+
+	if totalCommissionInBaseCoin.Cmp(coin.Reserve()) == 1 {
+		return "", rpctypes.RPCError{Code: 400, Message: "Not enough coin reserve for pay comission"}
+	}
+
+	return formula.CalculateSaleAmount(coin.Volume(), coin.Reserve(), coin.Crr(), totalCommissionInBaseCoin).String(), nil
+
 }
-func CalcFreeCoinForTx(gascoin string, gascoinamount big.Int, height int, txtype string, payload string, mtxs int) (UseMaxResponse, error) {
 
-	comission,err:=CalcTxCommission(gascoin,height,txtype,payload,mtxs)
-	
+func CalcFreeCoinForTx(gascoin string, gascoinamount string, height int, txtype string, payload []byte, mtxs int64) (*UseMaxResponse, error) {
+
+	comission, err := CalcTxCommission(gascoin, height, txtype, payload, mtxs)
+
 	if err != nil {
-		return UseMaxResponse{}, err
+		return new(UseMaxResponse), err
 	}
 
-	commissionBig := new(big.Int) 
-    	commissionBig.SetString(comission, 10) 
-	
-	if gascoinamount.Cmp(commissionBig) == -1{
-		return UseMaxResponse{}, rpctypes.RPCError{Code: 400, Message: "Not enough coin bipvalue for pay comission"}
+	commissionBig, _ := big.NewInt(0).SetString(comission, 10)
+	gascoinamountBig, _ := big.NewInt(0).SetString(gascoinamount, 10)
+
+	if gascoinamountBig.Cmp(commissionBig) == -1 {
+		return new(UseMaxResponse), rpctypes.RPCError{Code: 400, Message: "Not enough coin bipvalue for pay comission"}
 	}
 
-	return UseMaxResponse {
-		GasCoin: 		gascoin,
-		StartValue: 		gascoinamount.String(),
-		TXComissionValue: 	comission,
-		EndValue: 		big.NewInt(0).Sub(&gascoinamount,commissionBig).String(),
-	}, nil  
+	return &UseMaxResponse{
+		GasCoin:          gascoin,
+		StartValue:       gascoinamountBig.String(),
+		TXComissionValue: comission,
+		EndValue:         big.NewInt(0).Sub(gascoinamountBig, commissionBig).String(),
+	}, nil
 }

@@ -1,75 +1,67 @@
 package api
+
 import (
 	"github.com/MinterTeam/minter-go-node/rpc/lib/types"
 	"time"
-	)
+)
 
-func DurationTime(height1 int64, height2 int64)(time.Duration) {
-		block, _ := client.Block(&height1)
-		firstheighttime:=block.Block.Time
+func DurationTime(height1 int64, count int64) time.Duration {
+	if count == 0 {
+		count = 100
+	}
+	block1, _ := client.Block(&height1)
+	time1 := block1.Block.Time
 
-		block, _ = client.Block(&height2)
-		secondheighttime:=block.Block.Time
+	height2 := height1 - count
+	block2, _ := client.Block(&height2)
+	duration := time1.Sub(block2.Block.Time)
 
-	duration:=firstheighttime.Sub(secondheighttime)
+	return time.Duration(duration.Nanoseconds() / count)
+}
 
-return duration
-} 
+func HeightByTime(query string, height int64) (int64, error) {
 
-func HeightByTime(height int64, query string) (int64, error) {
-	var deflection time.Duration
-	var targettime time.Time
-	var targetheight int64
-
-	if height > 0 {
-		if height > int64(blockchain.Height()) {
-			return 0, rpctypes.RPCError{Code: 404, Message: "Inputed block higher actual block"}
-		}
-	}else{
-		height = int64(blockchain.Height())
+	h := int64(blockchain.Height())
+	if height > 0 && height > int64(blockchain.Height()) {
+		return 0, rpctypes.RPCError{Code: 404, Message: "Inputed block higher actual block"}
+	}
+	if height == 0 {
+		height = h
 	}
 
-	duration:=DurationTime(height, height - int64(1))
+	duration := DurationTime(height, 100)
 
 	block, _ := client.Block(&height)
 
-	if query=="day"{
-		deflection=86400000000000/duration
-		targettime =block.Block.Time.AddDate(0, 0, -1) 
-	} else if query=="week"{
-		deflection=604800000000000/duration
-		targettime =block.Block.Time.AddDate(0, 0, -7) 
-	} else if query==""{
+	var difference int64
+
+	switch query {
+
+	case "day":
+		difference = int64(time.Hour * 24 / duration)
+	case "week":
+		difference = int64(time.Hour * 24 * 7 / duration)
+	case "":
 		return height, nil
-	}else{
-		//2020-03-28T10:21:55Z
-		targettime,_ =time.Parse(time.RFC3339Nano, query)
-		deflection= block.Block.Time.Sub(targettime) / duration
+	default:
+		targettime, err := time.Parse(time.RFC3339, query)
+		if err != nil {
+			return 0, rpctypes.RPCError{Code: 404, Message: "Incorrect query time", Data: err.Error()}
+		}
+		difference = int64(block.Block.Time.Sub(targettime) / duration)
 	}
 
-	calcheigth:=height 
-
 	for {
-		if int64(deflection) > calcheigth{
-			return 0, rpctypes.RPCError{Code: 404, Message: "Incorrect Height time"}
-		}
+		height -= difference
+		block2, _ := client.Block(&height)
 
-		calcheigth = calcheigth - int64(deflection)
-		block, _ = client.Block(&calcheigth) 
-
-		duration = DurationTime(calcheigth, calcheigth - int64(1))
-		deflection = block.Block.Time.Sub(targettime) / duration 
-
-		if deflection == 0 {
-			if block.Block.Time.Sub(targettime) > 0 {
-				targetheight=calcheigth - int64(1)
-			} else {
-				targetheight=calcheigth
+		result := block.Block.Time.Sub(block2.Block.Time.Add(time.Duration(-difference))).Nanoseconds()
+		difference = result / duration.Nanoseconds()
+		if difference == 0 {
+			if result > 0 {
+				return height, nil
 			}
-			break
+			return height, nil
 		}
-	} 
-
-	return targetheight, nil 
+	}
 }
- 
