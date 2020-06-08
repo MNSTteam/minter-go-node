@@ -22,10 +22,9 @@ func FrozzedFunds(address types.Address, coin string) ([]*FrozInfo, error) {
 	appState := new(types.AppState)
 	cState.FrozenFunds.Export(appState, blockchain.Height())
 
-	var tmpaddress types.Address
-	var tmpcoin string
+	var emptyAddress types.Address
 
-	if coin == tmpcoin && address == tmpaddress {
+	if coin == "" && address == emptyAddress {
 		for _, fund := range appState.FrozenFunds {
 			frozes = append(frozes, &FrozInfo{
 				Height:       int(fund.Height),
@@ -38,7 +37,7 @@ func FrozzedFunds(address types.Address, coin string) ([]*FrozInfo, error) {
 		return frozes, nil
 	}
 
-	if coin != tmpcoin && address != tmpaddress {
+	if coin != "" && address != emptyAddress {
 		for _, fund := range appState.FrozenFunds {
 			if fund.Coin.String() != coin || fund.Address != address {
 				continue
