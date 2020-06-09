@@ -78,18 +78,17 @@ func MakeAddressBalance(address types.Address, height int) (*AddressBalanceRespo
 	balances := cState.Accounts.GetBalances(address)
 	var response AddressBalanceResponse
 
+	totalStakesGroupByCoin := map[types.CoinSymbol]*UserStake{}
+	freecoinStakesGroupByCoin := map[types.CoinSymbol]*UserStake{}
+
 	response.Freecoins = make([]*CoinBalance, 0, len(balances))
-
-	totalStakesGroupByCoin := map[string]*UserStake{}
-
-	freecoinStakesGroupByCoin := map[string]*UserStake{}
 	for coin, value := range balances {
 		result := CustomCoinBipBalance(coin.String(), value, cState)
-		freecoinStakesGroupByCoin[coin.String()] = &UserStake{
+		freecoinStakesGroupByCoin[coin] = &UserStake{
 			Value:    value,
 			BipValue: result,
 		}
-		totalStakesGroupByCoin[coin.String()] = &UserStake{
+		totalStakesGroupByCoin[coin] = &UserStake{
 			Value:    value,
 			BipValue: result,
 		}
@@ -100,10 +99,10 @@ func MakeAddressBalance(address types.Address, height int) (*AddressBalanceRespo
 		})
 	}
 
-	var userDelegatedStakesGroupByCoin = map[string]*UserStake{}
+	var userDelegatedStakesGroupByCoin = map[types.CoinSymbol]*UserStake{}
 	allCandidates := cState.Candidates.GetCandidates()
 	for _, candidate := range allCandidates {
-		userStakes := UserStakes(cState, candidate.PubKey, address.String())
+		userStakes := UserStakes(cState, candidate.PubKey, address)
 		for coin, userStake := range userStakes {
 			stake, ok := userDelegatedStakesGroupByCoin[coin]
 			if !ok {
@@ -112,15 +111,16 @@ func MakeAddressBalance(address types.Address, height int) (*AddressBalanceRespo
 					BipValue: big.NewInt(0),
 				}
 			}
-			userDelegatedStakesGroupByCoin[coin] = &UserStake{
-				Value:    big.NewInt(0).Add(stake.Value, userStake.Value),
-				BipValue: big.NewInt(0).Add(stake.BipValue, userStake.BipValue),
-			}
+			stake.Value.Add(stake.Value, userStake.Value)
+			stake.BipValue.Add(stake.BipValue, userStake.BipValue)
+			userDelegatedStakesGroupByCoin[coin] = stake
 		}
 	}
+
+	response.Delegated = make([]*CoinBalance, 0, len(userDelegatedStakesGroupByCoin))
 	for coin, delegatedStake := range userDelegatedStakesGroupByCoin {
 		response.Delegated = append(response.Delegated, &CoinBalance{
-			Coin:     coin,
+			Coin:     coin.String(),
 			Value:    delegatedStake.Value.String(),
 			BipValue: delegatedStake.BipValue.String(),
 		})
@@ -132,39 +132,38 @@ func MakeAddressBalance(address types.Address, height int) (*AddressBalanceRespo
 				BipValue: big.NewInt(0),
 			}
 		}
-		totalStakesGroupByCoin[coin] = &UserStake{
-			Value:    big.NewInt(0).Add(totalStake.Value, delegatedStake.Value),
-			BipValue: big.NewInt(0).Add(totalStake.BipValue, delegatedStake.BipValue),
-		}
+		totalStake.Value.Add(totalStake.Value, delegatedStake.Value)
+		totalStake.BipValue.Add(totalStake.BipValue, delegatedStake.BipValue)
+		totalStakesGroupByCoin[coin] = totalStake
 	}
 
-	coinsbipvalue := big.NewInt(0)
-
+	coinsBipValue := big.NewInt(0)
+	response.Total = make([]*CoinBalance, 0, len(totalStakesGroupByCoin))
 	for coin, stake := range totalStakesGroupByCoin {
 		response.Total = append(response.Total, &CoinBalance{
-			Coin:     coin,
+			Coin:     coin.String(),
 			Value:    stake.Value.String(),
 			BipValue: stake.BipValue.String(),
 		})
-		coinsbipvalue = big.NewInt(0).Add(coinsbipvalue, stake.BipValue)
+		coinsBipValue.Add(coinsBipValue, stake.BipValue)
 	}
 
 	response.TransactionCount = cState.Accounts.GetNonce(address)
-	response.Bipvalue = coinsbipvalue.String()
+	response.Bipvalue = coinsBipValue.String()
 
 	return &response, nil
 }
 
-func UserStakes(state *state.State, c types.Pubkey, address string) map[string]*UserStake {
-	var userStakes = map[string]*UserStake{}
+func UserStakes(state *state.State, c types.Pubkey, address types.Address) map[types.CoinSymbol]*UserStake {
+	var userStakes = map[types.CoinSymbol]*UserStake{}
 
 	stakes := state.Candidates.GetStakes(c)
 
 	for _, stake := range stakes {
-		if stake.Owner.String() != address {
+		if stake.Owner != address {
 			continue
 		}
-		userStakes[stake.Coin.String()] = &UserStake{
+		userStakes[stake.Coin] = &UserStake{
 			Value:    stake.Value,
 			BipValue: stake.BipValue,
 		}

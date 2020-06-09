@@ -31,8 +31,7 @@ func ResponseStakes(state *state.State, c *candidates.Candidate, coin string, ad
 
 	stakes := state.Candidates.GetStakes(c.PubKey)
 	for _, stake := range stakes {
-		if !(multiresponse && stake.Coin.String() == coin && stake.Owner == address) &&
-			!(!multiresponse && stake.Coin.String() == coin || stake.Owner == address || allPubkeyStakes) {
+		if !((multiresponse && stake.Coin.String() == coin && stake.Owner == address) || (!multiresponse && (stake.Coin.String() == coin || stake.Owner == address || allPubkeyStakes))) {
 			continue
 		}
 		coinStakes = append(coinStakes, &CStake{
@@ -42,8 +41,8 @@ func ResponseStakes(state *state.State, c *candidates.Candidate, coin string, ad
 			Value:    stake.Value.String(),
 			BipValue: stake.BipValue.String(),
 		})
-
 	}
+
 	return coinStakes
 }
 
@@ -71,7 +70,7 @@ func GetStakes(pubkey types.Pubkey, height int, coin string, address types.Addre
 	if pubkey == emptyPyb {
 		allCandidates = cState.Candidates.GetCandidates()
 	} else {
-		allCandidates = append(allCandidates, cState.Candidates.GetCandidate(pubkey))
+		allCandidates = []*candidates.Candidate{cState.Candidates.GetCandidate(pubkey)}
 	}
 
 	for _, candidate := range allCandidates {

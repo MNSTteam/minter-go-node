@@ -34,10 +34,11 @@ func ResponseCandidateAlt(state *state.State, c *candidates.Candidate) *Candidat
 		Status:     c.Status,
 		UsedSlots:  len(stakes),
 	}
-	addresses := map[string]struct{}{}
+
+	addresses := map[types.Address]struct{}{}
 
 	for _, validator := range state.Validators.GetValidators() {
-		if validator.PubKey.String() != candidate.PubKey {
+		if validator.PubKey != c.PubKey {
 			continue
 		}
 		candidate.Status = ValidatorOn
@@ -47,18 +48,12 @@ func ResponseCandidateAlt(state *state.State, c *candidates.Candidate) *Candidat
 	minStake := big.NewInt(0)
 	for i, stake := range stakes {
 		if candidate.UsedSlots >= ValidatorsMaxSlots {
-			if i == 0 {
-				minStake = stake.BipValue
+			if i != 0 && minStake.Cmp(stake.BipValue) != 1 {
 				continue
 			}
-			for minStake.Cmp(stake.BipValue) == 1 {
-				minStake = stake.BipValue
-			}
+			minStake = stake.BipValue
 		}
-
-		if _, ok := addresses[stake.Owner.String()]; !ok {
-			addresses[stake.Owner.String()] = struct{}{}
-		}
+		addresses[stake.Owner] = struct{}{}
 	}
 
 	candidate.UniqUsers = len(addresses)
@@ -114,13 +109,10 @@ func CandidatesAlt(height int, status int) ([]*CandidateResponseAlt, error) {
 	allCandidates := cState.Candidates.GetCandidates()
 	for _, candidate := range allCandidates {
 		candadateInfo := ResponseCandidateAlt(cState, candidate)
-		if status == 0 {
-			result = append(result, candadateInfo)
+		if status != 0 && candadateInfo.Status != byte(status) {
 			continue
 		}
-		if candadateInfo.Status == byte(status) {
-			result = append(result, candadateInfo)
-		}
+		result = append(result, candadateInfo)
 	}
 
 	return result, nil
