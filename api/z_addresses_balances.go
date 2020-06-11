@@ -34,8 +34,7 @@ type UserStake struct {
 	BipValue *big.Int
 }
 
-func CustomCoinBipBalance(coinToSellString string, valueToSell *big.Int, cState *state.State) *big.Int {
-	coinToSell := types.StrToCoinSymbol(coinToSellString)
+func CustomCoinBipBalance(coinToSell types.CoinSymbol, valueToSell *big.Int, cState *state.State) *big.Int {
 	coinToBuy := types.StrToCoinSymbol("BIP")
 
 	if coinToSell == coinToBuy {
@@ -78,24 +77,15 @@ func MakeAddressBalance(address types.Address, height int) (*AddressBalanceRespo
 	balances := cState.Accounts.GetBalances(address)
 	var response AddressBalanceResponse
 
-	totalStakesGroupByCoin := map[types.CoinSymbol]*UserStake{}
-	freecoinStakesGroupByCoin := map[types.CoinSymbol]*UserStake{}
+	totalStakesGroupByCoin := map[types.CoinSymbol]*big.Int{}
 
 	response.Freecoins = make([]*CoinBalance, 0, len(balances))
 	for coin, value := range balances {
-		result := CustomCoinBipBalance(coin.String(), value, cState)
-		freecoinStakesGroupByCoin[coin] = &UserStake{
-			Value:    value,
-			BipValue: result,
-		}
-		totalStakesGroupByCoin[coin] = &UserStake{
-			Value:    value,
-			BipValue: result,
-		}
+		totalStakesGroupByCoin[coin] = value
 		response.Freecoins = append(response.Freecoins, &CoinBalance{
 			Coin:     coin.String(),
 			Value:    value.String(),
-			BipValue: result.String(),
+			BipValue: CustomCoinBipBalance(coin, value, cState).String(),
 		})
 	}
 
@@ -127,25 +117,22 @@ func MakeAddressBalance(address types.Address, height int) (*AddressBalanceRespo
 
 		totalStake, ok := totalStakesGroupByCoin[coin]
 		if !ok {
-			totalStake = &UserStake{
-				Value:    big.NewInt(0),
-				BipValue: big.NewInt(0),
-			}
+			totalStake = big.NewInt(0)
+			totalStakesGroupByCoin[coin] = totalStake
 		}
-		totalStake.Value.Add(totalStake.Value, delegatedStake.Value)
-		totalStake.BipValue.Add(totalStake.BipValue, delegatedStake.BipValue)
-		totalStakesGroupByCoin[coin] = totalStake
+		totalStake.Add(totalStake, delegatedStake.Value)
 	}
 
 	coinsBipValue := big.NewInt(0)
 	response.Total = make([]*CoinBalance, 0, len(totalStakesGroupByCoin))
 	for coin, stake := range totalStakesGroupByCoin {
+		balance := CustomCoinBipBalance(coin, stake, cState)
 		response.Total = append(response.Total, &CoinBalance{
 			Coin:     coin.String(),
-			Value:    stake.Value.String(),
-			BipValue: stake.BipValue.String(),
+			Value:    stake.String(),
+			BipValue: balance.String(),
 		})
-		coinsBipValue.Add(coinsBipValue, stake.BipValue)
+		coinsBipValue.Add(coinsBipValue, balance)
 	}
 
 	response.TransactionCount = cState.Accounts.GetNonce(address)
