@@ -11,7 +11,7 @@ type CoinBalance struct {
 	Coin     string `json:"coin"`
 	Value    string `json:"value"`
 	BipValue string `json:"bip_value"`
-	bip_value_in_delegation `json:"bip_value_in_delegation,omitempty"`
+	DelegateBipValue `json:"delegate_bip_value,omitempty"`
 }
 
 type AddressBalanceResponse struct {
@@ -113,7 +113,7 @@ func MakeAddressBalance(address types.Address, height int) (*AddressBalanceRespo
 		response.Delegated = append(response.Delegated, &CoinBalance{
 			Coin:     coin.String(),
 			Value:    delegatedStake.Value.String(),
-			BipValueInDelegate: delegatedStake.BipValue.String(),
+			DelegateBipValue: delegatedStake.BipValue.String(),
 			BipValue:  CustomCoinBipBalance(coin, delegatedStake.Value, cState).String(),
 		})
 
