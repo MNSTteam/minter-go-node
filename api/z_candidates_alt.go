@@ -47,13 +47,13 @@ func ResponseCandidateAlt(state *state.State, c *candidates.Candidate) *Candidat
 
 	minStake := big.NewInt(0)
 	for i, stake := range stakes {
+		addresses[stake.Owner] = struct{}{}
 		if candidate.UsedSlots >= ValidatorsMaxSlots {
 			if i != 0 && minStake.Cmp(stake.BipValue) != 1 {
 				continue
 			}
 			minStake = stake.BipValue
 		}
-		addresses[stake.Owner] = struct{}{}
 	}
 
 	candidate.UniqUsers = len(addresses)
