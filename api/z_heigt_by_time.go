@@ -6,8 +6,8 @@ import (
 )
 
 func DurationTime(height1 int64, count int64) time.Duration {
-	if count == 0 {
-		count = 100
+	if count < 2 {
+		count = 120
 	}
 	block1, _ := client.Block(&height1)
 	time1 := block1.Block.Time
@@ -22,45 +22,48 @@ func DurationTime(height1 int64, count int64) time.Duration {
 func HeightByTime(query string, height int64) (int64, error) {
 
 	h := int64(blockchain.Height())
-	if height > 0 && height > int64(blockchain.Height()) {
+	if height > h {
 		return 0, rpctypes.RPCError{Code: 404, Message: "Inputed block higher actual block"}
 	}
 	if height == 0 {
 		height = h
 	}
 
-	duration := DurationTime(height, 100)
+	duration := DurationTime(height, 120)
 
-	block, _ := client.Block(&height)
+	block, err := client.Block(&height)
+	if err != nil {
+		return 0, err
+	}
 
-	var difference int64
-
+	var sub time.Duration
 	switch query {
-
 	case "day":
-		difference = int64(time.Hour * 24 / duration)
+		sub = time.Hour * 24
 	case "week":
-		difference = int64(time.Hour * 24 * 7 / duration)
+		sub = time.Hour * 24 * 7
 	case "":
 		return height, nil
 	default:
-		targettime, err := time.Parse(time.RFC3339, query)
+		target, err := time.Parse(time.RFC3339, query)
 		if err != nil {
 			return 0, rpctypes.RPCError{Code: 404, Message: "Incorrect query time", Data: err.Error()}
 		}
-		difference = int64(block.Block.Time.Sub(targettime) / duration)
+		sub = block.Block.Time.Sub(target)
 	}
 
-	for {
-		height -= difference
-		block2, _ := client.Block(&height)
+	difference := -int64(sub / duration)
+	targetTime := block.Block.Time.Add(-sub)
 
-		result := block.Block.Time.Sub(block2.Block.Time.Add(time.Duration(-difference))).Nanoseconds()
-		difference = result / duration.Nanoseconds()
+	for {
+		height += difference
+		block2, err := client.Block(&height)
+		if err != nil {
+			return 0, err
+		}
+		result := targetTime.Sub(block2.Block.Time)
+		difference = int64(result / DurationTime(height, 2))
 		if difference == 0 {
-			if result > 0 {
-				return height, nil
-			}
 			return height, nil
 		}
 	}

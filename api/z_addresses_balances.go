@@ -8,18 +8,15 @@ import (
 )
 
 type CoinBalance struct {
-	Coin     string `json:"coin"`
-	Value    string `json:"value"`
-	BipValue string `json:"bip_value"`
-	DelegateBipValue `json:"delegate_bip_value,omitempty"`
+	Coin             string `json:"coin"`
+	Value            string `json:"value"`
+	BipValue         string `json:"bip_value"`
+	DelegateBipValue string `json:"delegate_bip_value,omitempty"`
 }
 
 type AddressBalanceResponse struct {
-	Freecoins []*CoinBalance `json:"freecoins"`
-	Delegated []*CoinBalance `json:"delegated"`
-
-	//todo: unbound (замороженные)
-
+	Freecoins        []*CoinBalance `json:"freecoins"`
+	Delegated        []*CoinBalance `json:"delegated"`
 	Total            []*CoinBalance `json:"total"`
 	TransactionCount uint64         `json:"transaction_count"`
 	Bipvalue         string         `json:"bipvalue"`
@@ -111,10 +108,10 @@ func MakeAddressBalance(address types.Address, height int) (*AddressBalanceRespo
 	response.Delegated = make([]*CoinBalance, 0, len(userDelegatedStakesGroupByCoin))
 	for coin, delegatedStake := range userDelegatedStakesGroupByCoin {
 		response.Delegated = append(response.Delegated, &CoinBalance{
-			Coin:     coin.String(),
-			Value:    delegatedStake.Value.String(),
+			Coin:             coin.String(),
+			Value:            delegatedStake.Value.String(),
 			DelegateBipValue: delegatedStake.BipValue.String(),
-			BipValue:  CustomCoinBipBalance(coin, delegatedStake.Value, cState).String(),
+			BipValue:         CustomCoinBipBalance(coin, delegatedStake.Value, cState).String(),
 		})
 
 		totalStake, ok := totalStakesGroupByCoin[coin]
