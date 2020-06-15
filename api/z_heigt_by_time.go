@@ -52,19 +52,22 @@ func HeightByTime(query string, height int64) (int64, error) {
 		sub = block.Block.Time.Sub(target)
 	}
 
-	difference := -int64(sub / duration)
+	difference := -float64(sub / duration)
 	targetTime := block.Block.Time.Add(-sub)
 
 	for {
-		height += difference
+		height += int64(difference)
 		block2, err := client.Block(&height)
 		if err != nil {
 			return 0, err
 		}
 		result := targetTime.Sub(block2.Block.Time)
-		difference = int64(result / DurationTime(height, 2))
-		if difference == 0 {
-			return height, nil
+		difference = float64(result) / float64(DurationTime(height, 2))
+		if int(difference) == 0 {
+			if difference > 0 {
+				return height, nil
+			}
+			return height - 1, nil
 		}
 	}
 }
