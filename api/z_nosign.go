@@ -40,19 +40,22 @@ func NoSign(height int64) ([]*MissBlock, error) {
 		proposer = p.String()
 	}
 
+	sign := map[string]struct{}{}
+	for _, vote := range block.Block.LastCommit.Signatures {
+		sign[vote.ValidatorAddress.String()] = struct{}{}
+	}
+
 	for _, tmval := range totalValidators.Validators {
-		for _, vote := range block.Block.LastCommit.Signatures {
-			if vote.ValidatorAddress.String() == tmval.Address.String() {
-				continue
-			}
-			mb := &MissBlock{
-				Height:   height,
-				Proposer: proposer,
-				Pubkey:   fmt.Sprintf("Mp%x", tmval.PubKey.Bytes()[5:]),
-			}
-			mbs = append(mbs, mb)
-			break
+		if _, ok := sign[tmval.Address.String()]; ok {
+			continue
 		}
+		mb := &MissBlock{
+			Height:   height,
+			Proposer: proposer,
+			Pubkey:   fmt.Sprintf("Mp%x", tmval.PubKey.Bytes()[5:]),
+		}
+		mbs = append(mbs, mb)
+		break
 	}
 
 	return mbs, nil
