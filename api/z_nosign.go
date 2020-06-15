@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/MinterTeam/minter-go-node/rpc/lib/types"
 )
@@ -43,7 +42,7 @@ func NoSign(height int64) ([]*MissBlock, error) {
 
 	for _, tmval := range totalValidators.Validators {
 		for _, vote := range block.Block.LastCommit.Signatures {
-			if bytes.Equal(vote.ValidatorAddress.Bytes(), tmval.Address.Bytes()) {
+			if vote.ValidatorAddress.String() == tmval.Address.String() {
 				continue
 			}
 			mb := &MissBlock{
