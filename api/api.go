@@ -64,8 +64,8 @@ var Routes = map[string]*rpcserver.RPCFunc{
 	"candidates_info":        rpcserver.NewRPCFunc(CandidatesAlt, "status,height"),
 	"nosign":                 rpcserver.NewRPCFunc(NoSign, "height"),
 	"txs_from_block":         rpcserver.NewRPCFunc(TxsFromBlock, "height"),
-	"find_events":            rpcserver.NewRPCFunc(FindEvents, "find,height"),
-	"grouped_events":         rpcserver.NewRPCFunc(GroupedEvents, "height"),
+	//"find_events":            rpcserver.NewRPCFunc(FindEvents, "find,height"), //todo
+	"grouped_events": rpcserver.NewRPCFunc(GroupedEvents, "height"),
 }
 
 func responseTime(b *minter.Blockchain) func(f func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {

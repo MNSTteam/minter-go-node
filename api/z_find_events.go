@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	eventsdb "github.com/MinterTeam/events-db"
-	"github.com/MinterTeam/minter-go-node/core/types"
 	"github.com/tidwall/gjson"
 )
 
@@ -11,16 +10,16 @@ type FindEventsResponse struct {
 	Events eventsdb.Events `json:"events"`
 }
 
-func FindEvents(height uint64, find []types.Address) (*FindEventsResponse, error) {
+func FindEvents(height uint64, find []string) (*FindEventsResponse, error) {
 	var result FindEventsResponse
-
+	//todo check find
 	events := blockchain.GetEventsDB().LoadEvents(uint32(height))
 
 	for _, event := range events {
-		marshalEvent, _ := json.Marshal(event)
-		address := gjson.GetBytes(marshalEvent, "address")
+		marshalEvent, _ := json.Marshal(event) //todo add interface to Event
+		address := gjson.GetManyBytes(marshalEvent, "address", "validator_pub_key")
 		for _, addr := range find {
-			if address.String() == addr.String() {
+			if address[0].String() == addr || address[1].String() == addr {
 				result.Events = append(result.Events, event)
 			}
 		}
